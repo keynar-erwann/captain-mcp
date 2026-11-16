@@ -668,7 +668,14 @@ export function registerChunkTools(server: McpServer): void {
         "`scope.next_collection_cursor` is set: call again with it as `collection_cursor` (same query and " +
         "exclude_collections) to search the next window, until it is null. Scores are comparable within one " +
         "window only, not across windows. `collections` summarises hits and top_score per collection, and " +
-        "`scope` says what was searched (total_collections, window_start, window_collections). Billed as one query.",
+        "`scope` says what was searched (total_collections, window_start, window_collections). Billed as one query. " +
+        "RECALL WARNING: every collection gets the same shallow look (its top max(10, limit) hits from a shared " +
+        "budget of 4,000, never fewer than 10 each), so recall per collection falls as the collection count grows: " +
+        "at limit 100, more than 40 collections means fewer than 100 candidates each, and from 400 collections " +
+        "each contributes 10. A relevant passage below a collection's top 10 can be missed. Use this tool to find " +
+        "which collections hold a topic, then query those collections by name (captain_search_v3, or " +
+        "captain_search_v3_multi for up to 10) for the full-depth answer. Use exclude_collections to keep " +
+        "irrelevant collections out of the budget.",
       inputSchema: {
         query: z.string().describe("Natural-language search query"),
         ...QueryAllConfigSchema.shape,
