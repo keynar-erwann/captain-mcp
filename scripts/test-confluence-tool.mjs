@@ -95,3 +95,18 @@ test('the image-link tool names original and Confluence attachments', () => {
     assert.match(d, /PII masking/);
   });
 });
+
+test('empty or malformed ids are refused by the schema, never read as a whole-site import', () => {
+  const schema = z.object(handlers().get(TOOL).definition.inputSchema);
+  for (const bad of [{ page_id: '' }, { page_id: '  ' }, { page_id: 'abc' }, { space_key: '' }, { space_key: '   ' }, { space_keys: [] }, { space_keys: [''] }]) {
+    assert.equal(schema.safeParse({ ...creds, ...bad }).success, false, `accepted ${JSON.stringify(bad)}`);
+  }
+  assert.ok(schema.safeParse({ ...creds, page_id: '123456' }).success);
+  assert.ok(schema.safeParse({ ...creds, space_key: 'ENG' }).success);
+});
+
+test('an empty id that bypassed the schema is still not a whole-site import', async (t) => {
+  const seen = captureFetch(t);
+  await call(TOOL, { ...creds, page_id: '' });
+  assert.match(seen[0].url, /\/index\/confluence\/page$/);
+});

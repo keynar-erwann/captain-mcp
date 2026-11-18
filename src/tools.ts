@@ -1116,10 +1116,10 @@ export function registerCaptainTools(server: McpServer): void {
         confluence_site: z.string().describe("Confluence Cloud site host, e.g. acme.atlassian.net"),
         confluence_email: z.string().describe("Email of the Atlassian account the API token belongs to"),
         confluence_api_token: z.string().describe("Atlassian API token for that account"),
-        space_key: z.string().optional().describe("Import only this space (by key, e.g. ENG)"),
-        page_id: z.string().optional().describe("Import only this page, by its numeric id from the page URL"),
+        space_key: z.string().trim().min(1).optional().describe("Import only this space (by key, e.g. ENG)"),
+        page_id: z.string().trim().regex(/^\d+$/, "page_id is the numeric id from the page URL").optional().describe("Import only this page, by its numeric id from the page URL"),
         include_descendants: z.boolean().optional().describe("With page_id: also import the pages under it (default true)"),
-        space_keys: z.array(z.string()).max(100).optional().describe("Whole-site import limited to these spaces (omit for every space the token can see)"),
+        space_keys: z.array(z.string().trim().min(1)).min(1).max(100).optional().describe("Whole-site import limited to these spaces (omit for every space the token can see)"),
         include_attachments: z.boolean().optional().describe("Import files attached to pages (default true)"),
         include_images: z.boolean().optional().describe("Also import pictures, audio and video attached to pages (default false). Requires include_attachments"),
         include_comments: z.boolean().optional().describe("Add footer and inline comments to each page (default true). A new comment re-indexes its page"),
@@ -1134,10 +1134,12 @@ export function registerCaptainTools(server: McpServer): void {
       },
     },
     async (params): Promise<ToolResult> => {
-      if (params.page_id && params.space_key) {
+      const hasPage = params.page_id !== undefined;
+      const hasSpace = params.space_key !== undefined;
+      if (hasPage && hasSpace) {
         throw new Error("Give `page_id` or `space_key`, not both.");
       }
-      if (params.space_keys && (params.page_id || params.space_key)) {
+      if (params.space_keys !== undefined && (hasPage || hasSpace)) {
         throw new Error("`space_keys` is for a whole-site import. Leave out `page_id` and `space_key`, or drop `space_keys`.");
       }
       const config = getConfig();
@@ -1153,18 +1155,18 @@ export function registerCaptainTools(server: McpServer): void {
       const base = `collections/${encodeURIComponent(params.collection)}/index/confluence`;
       let endpoint: string;
       let source: string;
-      if (params.page_id) {
+      if (hasPage) {
         endpoint = `${base}/page`;
         body.page_id = params.page_id;
         if (params.include_descendants !== undefined) body.include_descendants = params.include_descendants;
         source = `confluence:${params.confluence_site}/page/${params.page_id}`;
-      } else if (params.space_key) {
+      } else if (hasSpace) {
         endpoint = `${base}/space`;
         body.space_key = params.space_key;
         source = `confluence:${params.confluence_site}/space/${params.space_key}`;
       } else {
         endpoint = base;
-        if (params.space_keys) body.space_keys = params.space_keys;
+        if (params.space_keys !== undefined) body.space_keys = params.space_keys;
         source = `confluence:${params.confluence_site}`;
       }
       log(`Importing ${source} into '${params.collection}'`);
