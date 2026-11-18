@@ -15,6 +15,7 @@ Exposes 19 tools:
 - `captain_list_jobs`, `captain_job_status` (per-file results, credits billed, PII report pointer), `captain_cancel_job`, `captain_rollback_job`, `captain_get_pii_report`, `captain_delete_pii_report`
 - `captain_validate_parsing_script`: check a JavaScript parsing script in the sandbox before passing it as `parsing_script` to an index tool
 - `captain_index_url`, `captain_index_youtube` (transcript / audio / video mode), `captain_index_text`, `captain_index_file`
+- `captain_index_instagram`, `captain_index_tiktok`: public posts by URL (max 20), indexed as audio (default) or video plus the caption, and carousel pictures on Instagram. These two take only their own options: no `max_files`, `transcription_language` or `parsing_script`
 - `captain_index_s3` (assume-role or access key), `captain_index_gcs`, `captain_index_azure`, `captain_index_r2` (jurisdiction incl. `us`)
 - Every index tool accepts `custom_metadata`, `mask_pii`, `max_files`, `skip_existing`, `overwrite_existing`, `transcription_language`, and `parsing_script` where the endpoint does
 
@@ -58,7 +59,7 @@ Exposes 19 tools:
 **Integration wizard (1):**
 - `captain_wizard` — writes Captain into a codebase, using Captain's own agent docs (`llms.txt`) as the source of truth for the current API surface. On first use it asks the user's permission to send routine, de-identified feedback about the integration to Captain's public feedback endpoint (no key, no code, no personal data).
 
-> The hosted server (see below) also adds more indexing sources (Dropbox, Supabase, Backblaze, SharePoint, OneDrive, Google Drive, Confluence), storage syncs, v3 search, chunk-level tools, query history, `captain_eval`, the Evaluation API, job webhooks and the Parse API — 80 tools total.
+> The hosted server (see below) also adds more indexing sources (Dropbox, Supabase, Backblaze, SharePoint, OneDrive, Google Drive, Confluence, Instagram, TikTok), storage syncs, v3 search, chunk-level tools, query history, `captain_eval`, the Evaluation API, job webhooks and the Parse API, 83 tools total.
 
 **Advanced search (`captain_search_v3`).** Every retrieval lever is a request parameter, not a re-index, so they can be tuned against a question set with `captain_eval`:
 - `semantic_ratio` — blends the two retrieval legs, keyword (BM25) and semantic (dense vector). `0.0` is keyword only and fastest (it skips embedding the query), `1.0` is semantic only, `0.5` is the default. Lower it for corpora full of exact strings (part numbers, error codes); raise it when callers paraphrase.
