@@ -461,6 +461,22 @@ export function registerCaptainTools(server: McpServer): void {
           lines.push(`  - ${v.video_id}: ${v.mode_used}${v.fell_back_from ? ` (fell back from ${v.fell_back_from})` : ""}${v.error ? ` — ${v.error}` : ""}`);
         }
       }
+      // Instagram and TikTok jobs: the per-post and per-item outcome from
+      // source_report. A post can be indexed while some of its items failed
+      // (a silent carousel video in audio mode: no_audio_stream), so each
+      // item that did not go to indexing is listed with its reason.
+      const sr = data.source_report;
+      if (sr && typeof sr === "object" && Array.isArray(sr.social_posts)) {
+        lines.push(`Posts: ${sr.posts_seen ?? 0} seen, ${sr.posts_indexed ?? 0} indexed, ${sr.posts_skipped_unchanged ?? 0} skipped (unchanged), ${sr.posts_failed ?? 0} failed`);
+        for (const p of sr.social_posts.slice(0, 50)) {
+          const items = Array.isArray(p.items) ? p.items : [];
+          const failed = items.filter((i: any) => i && i.status === "failed");
+          lines.push(`  - ${p.post_id ?? p.url ?? "?"} [${p.status ?? "?"}]${p.mode_used ? ` ${p.mode_used}` : ""}${p.reason ? `: ${p.reason}` : ""}${items.length ? `, ${items.length - failed.length} of ${items.length} items indexed or queued` : ""}`);
+          for (const i of failed) {
+            lines.push(`      ${i.kind ?? "item"}${i.index != null ? ` ${i.index}` : ""} failed${i.reason ? `: ${i.reason}` : ""}`);
+          }
+        }
+      }
       if (data.pii_report && typeof data.pii_report === "object") {
         lines.push(`PII report: ${data.pii_report.state}${data.pii_report.state === "retained" ? " (captain_get_pii_report)" : ""}`);
       }
@@ -604,8 +620,10 @@ export function registerCaptainTools(server: McpServer): void {
         title: `Index public ${label} posts`,
         description:
           `Index public ${label} posts into a Captain collection (max 20). Each post is indexed as its audio (default) or video ` +
-          (platform === "instagram" ? "plus its caption and carousel pictures. " : "plus its caption. TikTok slideshow photos are not available. ") +
-          "Private posts, profiles, hashtags, stories and comments are not imported. Check per-post results with captain_job_status.",
+          (platform === "instagram" ? "plus its caption and carousel pictures. " : "plus its caption. TikTok slideshow photos are not indexed (caption and audio only). ") +
+          "Audio is the default mode. Private posts, profiles, hashtags, stories and comments are not imported. " +
+          "captain_job_status lists each post and each failed item with its reason: a post can be indexed while some items failed, " +
+          "for example a silent video in audio mode (no_audio_stream; use mode 'video').",
         inputSchema,
       },
       async (params: Record<string, any>): Promise<ToolResult> => {

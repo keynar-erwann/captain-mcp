@@ -78,3 +78,32 @@ test('skip_existing and overwrite_existing both true is refused before anything 
     /skip_existing to be false/);
   assert.equal(seen.length, 0);
 });
+
+test('the descriptions state the audio default and that slideshow photos are not indexed', () => {
+  const ig = handlers().get('captain_index_instagram').definition.description;
+  const tt = handlers().get('captain_index_tiktok').definition.description;
+  for (const d of [ig, tt]) {
+    assert.match(d, /Audio is the default mode/);
+    assert.match(d, /no_audio_stream/);
+  }
+  assert.match(tt, /slideshow photos are not indexed/);
+});
+
+test('captain_job_status lists each post and each failed item', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({
+    job_id: 'job_1', status: 'completed', job_type: 'index_instagram',
+    source_report: {
+      source: 'instagram', posts_seen: 1, posts_indexed: 1, posts_skipped_unchanged: 0, posts_failed: 0,
+      social_posts: [{
+        platform: 'instagram', post_id: 'BQ0eAlwhDrw', status: 'indexed', mode_used: 'audio', reason: null,
+        items: [1, 2, 3].map((n) => ({ kind: 'audio', index: n, status: 'failed', reason: 'no_audio_stream', file_name: `instagram_BQ0eAlwhDrw_${n}.m4a` }))
+          .concat([{ kind: 'caption', status: 'queued', reason: null, file_name: 'instagram_BQ0eAlwhDrw_caption.txt' }]),
+      }],
+    },
+  }), { status: 200 }));
+  const out = await call('captain_job_status', { job_id: 'job_1' });
+  const text = out.content[0].text;
+  assert.match(text, /Posts: 1 seen, 1 indexed, 0 skipped \(unchanged\), 0 failed/);
+  assert.match(text, /BQ0eAlwhDrw \[indexed\] audio, 1 of 4 items indexed or queued/);
+  for (const n of [1, 2, 3]) assert.match(text, new RegExp(`audio ${n} failed: no_audio_stream`));
+});
