@@ -76,15 +76,20 @@ export function registerDocumentTools(server: McpServer): void {
   server.registerTool(
     "captain_create_asset_urls",
     {
-      title: "Get viewable URLs for figures",
+      title: "Get viewable URLs for figures and images",
       description:
-        "Mint short-lived URLs for figure crops referenced by `regions[].figure_id` (from captain_search_v3 with " +
-        "include_regions, captain_get_document, or captain_get_document_page). The figure ids are stable and safe to " +
-        "store; the URLs expire (see `expires_at`), so mint them when you need to view the image.",
+        "Mint short-lived URLs to view images in a document. Asset ids can be: figure crops referenced by " +
+        "`regions[].figure_id` (`fig_1_...`, from captain_search_v3 with include_regions, captain_get_document, or " +
+        "captain_get_document_page); `original`, the original file of a document that is itself an image; or the " +
+        "`confluence://.../attachments/...` identity of a picture attached to a Confluence page document. " +
+        "Ids are stable and safe to store; the URLs expire (see `expires_at`), so mint them when you need them. " +
+        "Links to an original or an attachment last 15 minutes at most, and at most 25 attachment ids are signed per call. " +
+        "An original is not offered for a document indexed with PII masking, or for files Captain cannot prove it holds " +
+        "(each such id comes back with a status other than signed and a reason).",
       inputSchema: {
         collection: z.string().describe("Collection name"),
         document_id: z.string().describe("Document the figures belong to"),
-        asset_ids: z.array(z.string()).min(1).max(100).describe("Figure ids (`fig_1_...`) to mint URLs for, max 100"),
+        asset_ids: z.array(z.string()).min(1).max(100).describe("Figure ids (`fig_1_...`), `original`, or Confluence attachment identities, max 100 (25 attachment ids)"),
       },
     },
     async (params): Promise<ToolResult> => {
