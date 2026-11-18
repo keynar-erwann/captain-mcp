@@ -1097,6 +1097,82 @@ export function registerCaptainTools(server: McpServer): void {
     }
   );
 
+  // ── captain_index_confluence ────────────────────────────────
+  // The Confluence routes refuse skip_existing and overwrite_existing (a second
+  // call already skips unchanged pages), so this tool takes its own options and
+  // not the shared indexOptionFields.
+  server.registerTool(
+    "captain_index_confluence",
+    {
+      title: "Import from Confluence",
+      description:
+        "Import a Confluence Cloud site into a Captain collection: every space the token can see, a list of spaces, one space, or one page with the pages under it. " +
+        "Pages become Markdown documents with their comments; attached files are imported too. Pictures, audio and video are imported only with include_images. " +
+        "Requires an Atlassian account email and an Atlassian API token; Captain sees only what that token can see. " +
+        "Running it again skips unchanged pages at no cost and replaces changed ones in place; force re-imports everything. " +
+        "Only one Confluence import runs per collection at a time: a second call while one runs is refused with 409.",
+      inputSchema: {
+        collection: z.string().describe("Collection name to import into"),
+        confluence_site: z.string().describe("Confluence Cloud site host, e.g. acme.atlassian.net"),
+        confluence_email: z.string().describe("Email of the Atlassian account the API token belongs to"),
+        confluence_api_token: z.string().describe("Atlassian API token for that account"),
+        space_key: z.string().optional().describe("Import only this space (by key, e.g. ENG)"),
+        page_id: z.string().optional().describe("Import only this page, by its numeric id from the page URL"),
+        include_descendants: z.boolean().optional().describe("With page_id: also import the pages under it (default true)"),
+        space_keys: z.array(z.string()).max(100).optional().describe("Whole-site import limited to these spaces (omit for every space the token can see)"),
+        include_attachments: z.boolean().optional().describe("Import files attached to pages (default true)"),
+        include_images: z.boolean().optional().describe("Also import pictures, audio and video attached to pages (default false). Requires include_attachments"),
+        include_comments: z.boolean().optional().describe("Add footer and inline comments to each page (default true). A new comment re-indexes its page"),
+        force: z.boolean().optional().describe("Re-import every page and attachment, changed or not (default false)"),
+        processing_type: processingTypeEnum("Parsing tier for attached files: 'advanced' (default here) or 'basic'.").optional(),
+        custom_metadata: indexOptionFields.custom_metadata,
+        mask_pii: indexOptionFields.mask_pii,
+        pii_engine: indexOptionFields.pii_engine,
+        pii_fallback: indexOptionFields.pii_fallback,
+        pii_fields: indexOptionFields.pii_fields,
+        pii_instructions: indexOptionFields.pii_instructions,
+      },
+    },
+    async (params): Promise<ToolResult> => {
+      if (params.page_id && params.space_key) {
+        throw new Error("Give `page_id` or `space_key`, not both.");
+      }
+      if (params.space_keys && (params.page_id || params.space_key)) {
+        throw new Error("`space_keys` is for a whole-site import. Leave out `page_id` and `space_key`, or drop `space_keys`.");
+      }
+      const config = getConfig();
+      const body: Record<string, unknown> = {
+        confluence_site: params.confluence_site,
+        confluence_email: params.confluence_email,
+        confluence_api_token: params.confluence_api_token,
+        processing_type: params.processing_type || "advanced",
+      };
+      for (const k of ["include_attachments", "include_images", "include_comments", "force", "custom_metadata", "mask_pii", "pii_engine", "pii_fallback", "pii_fields", "pii_instructions"] as const) {
+        if (params[k] !== undefined) body[k] = params[k];
+      }
+      const base = `collections/${encodeURIComponent(params.collection)}/index/confluence`;
+      let endpoint: string;
+      let source: string;
+      if (params.page_id) {
+        endpoint = `${base}/page`;
+        body.page_id = params.page_id;
+        if (params.include_descendants !== undefined) body.include_descendants = params.include_descendants;
+        source = `confluence:${params.confluence_site}/page/${params.page_id}`;
+      } else if (params.space_key) {
+        endpoint = `${base}/space`;
+        body.space_key = params.space_key;
+        source = `confluence:${params.confluence_site}/space/${params.space_key}`;
+      } else {
+        endpoint = base;
+        if (params.space_keys) body.space_keys = params.space_keys;
+        source = `confluence:${params.confluence_site}`;
+      }
+      log(`Importing ${source} into '${params.collection}'`);
+      const data = await captainFetch(config, endpoint, { method: "POST", body });
+      return jobStartedResponse(data.job_id, source);
+    }
+  );
+
   // ── captain_index_sharepoint ────────────────────────────────
   server.registerTool(
     "captain_index_sharepoint",
