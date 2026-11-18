@@ -568,6 +568,66 @@ export function registerCaptainTools(server: McpServer): void {
     }
   );
 
+  // ── captain_index_instagram / captain_index_tiktok ──────────
+  // Public posts only. The routes refuse unknown fields with a 422, so these
+  // tools offer exactly the route's body: no max_files, transcription_language
+  // or parsing_script, and include_images on Instagram only.
+  const socialTool = (platform: "instagram" | "tiktok") => {
+    const label = platform === "instagram" ? "Instagram" : "TikTok";
+    const forms = platform === "instagram"
+      ? "instagram.com/p/{shortcode}/, /reel/, /reels/ or /tv/ links (share links are refused)"
+      : "tiktok.com/@user/video/{id} or /photo/{id}, or a vm.tiktok.com, vt.tiktok.com or tiktok.com/t/ short link";
+    const inputSchema: Record<string, z.ZodTypeAny> = {
+      collection: z.string().describe("Collection name to index into"),
+      urls: z.union([z.string(), z.array(z.string()).min(1).max(20)])
+        .describe(`${label} post URL or array of URLs (max 20, 5 on a trial): ${forms}`),
+      mode: z.enum(["audio", "video"]).optional()
+        .describe("'audio' (default, 5 credits per minute) transcribes the soundtrack. 'video' (20 credits per minute) also indexes the picture. Posts over 10 minutes are not indexed"),
+      include_caption: z.boolean().optional().describe("Index the post's caption as a small text document (default true)"),
+      skip_existing: z.boolean().optional().describe("Skip posts already in the collection, at no cost (default true). An edited caption is skipped too"),
+      overwrite_existing: z.boolean().optional().describe("Delete and re-index posts already in the collection, to pick up an edited caption (default false). Requires skip_existing false"),
+      processing_type: processingTypeEnum("Parsing tier for the caption and images: 'basic' (default) or 'advanced'.").optional(),
+      custom_metadata: indexOptionFields.custom_metadata,
+      mask_pii: indexOptionFields.mask_pii,
+      pii_engine: indexOptionFields.pii_engine,
+      pii_fallback: indexOptionFields.pii_fallback,
+      pii_fields: indexOptionFields.pii_fields,
+      pii_instructions: indexOptionFields.pii_instructions,
+    };
+    if (platform === "instagram") {
+      inputSchema.include_images = z.boolean().optional()
+        .describe("Index the pictures of an image post or carousel (default true)");
+    }
+    server.registerTool(
+      `captain_index_${platform}`,
+      {
+        title: `Index public ${label} posts`,
+        description:
+          `Index public ${label} posts into a Captain collection (max 20). Each post is indexed as its audio (default) or video ` +
+          (platform === "instagram" ? "plus its caption and carousel pictures. " : "plus its caption. TikTok slideshow photos are not available. ") +
+          "Private posts, profiles, hashtags, stories and comments are not imported. Check per-post results with captain_job_status.",
+        inputSchema,
+      },
+      async (params: Record<string, any>): Promise<ToolResult> => {
+        if (params.skip_existing === true && params.overwrite_existing === true) {
+          throw new Error("overwrite_existing requires skip_existing to be false; the API refuses both true with a 400");
+        }
+        const config = getConfig();
+        const urlList: string[] = Array.isArray(params.urls) ? params.urls : [params.urls];
+        log(`Indexing ${urlList.length} ${label} post(s) into '${params.collection}'`);
+        const body: Record<string, unknown> = urlList.length === 1 ? { url: urlList[0] } : { urls: urlList };
+        for (const k of ["mode", "include_caption", "include_images", "skip_existing", "overwrite_existing", "processing_type",
+                         "custom_metadata", "mask_pii", "pii_engine", "pii_fallback", "pii_fields", "pii_instructions"]) {
+          if (params[k] !== undefined) body[k] = params[k];
+        }
+        const data = await captainFetch(config, `collections/${encodeURIComponent(params.collection)}/index/${platform}`, { method: "POST", body });
+        return jobStartedResponse(data.job_id, `${urlList.length} ${label} post(s)`);
+      }
+    );
+  };
+  socialTool("instagram");
+  socialTool("tiktok");
+
   // ── captain_index_text ──────────────────────────────────────
   server.registerTool(
     "captain_index_text",
