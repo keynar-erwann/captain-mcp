@@ -583,7 +583,8 @@ export function registerChunkTools(server: McpServer): void {
         `collections/${enc(params.collection)}/query`,
         { version: "v3", method: "POST", body },
       );
-      return json(selectFields(data, "results", fields, CHUNK_IDS));
+      // v3 search results carry the document id as document.id, not a top-level document_id.
+      return json(selectFields(data, "results", fields, ["chunk_id", "document.id"]));
     }
   );
 

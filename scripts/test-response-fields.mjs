@@ -451,9 +451,10 @@ test('list chunks: paging keys survive so the caller can still fetch the next pa
 });
 
 test('v3 query: only results are projected, not timing.stages, boost or the other lists', () => {
-  const out = selectFields(QUERY_V3, 'results', ['text', 'score'], ['chunk_id', 'document_id']);
+  const out = selectFields(QUERY_V3, 'results', ['text', 'score'], ['chunk_id', 'document.id']);
   assert.deepEqual(out.results, [{
     chunk_id: QUERY_V3.results[0].chunk_id, score: QUERY_V3.results[0].score, text: QUERY_V3.results[0].text,
+    document: { id: QUERY_V3.results[0].document.id },
   }]);
   assert.deepEqual(out.timing, QUERY_V3.timing);
   for (const key of ['boost', 'warnings', 'exclude_chunk_types', 'rerank', 'query_id', 'request_id', 'total_results']) {
@@ -478,6 +479,21 @@ test('a key carried by only some items is not missing', () => {
   assert.equal(out.fields_applied.missing, undefined);
   assert.deepEqual(out.chunks[1].verified_facts, PARSE_JOB.chunks[1].verified_facts);
   assert.deepEqual(out.chunks[0], { chunk_id: PARSE_JOB.chunks[0].chunk_id });
+});
+
+test('a nested id is kept alone, and the whole parent when it is requested', () => {
+  const out = selectFields(QUERY_V3, 'results', ['text'], ['chunk_id', 'document.id']);
+  assert.deepEqual(out.results[0].document, { id: 'f4a91c7e8b2d4a0c9e6f13b5a8d02744' });
+  assert.ok(out.fields_applied.omitted.includes('document'), 'the rest of document was removed, so it is named');
+  const full = selectFields(QUERY_V3, 'results', ['text', 'document'], ['chunk_id', 'document.id']);
+  assert.deepEqual(full.results[0].document, QUERY_V3.results[0].document);
+  const absent = selectFields({ results: [{ chunk_id: 'a', text: 't', document: null }] }, 'results', ['text'], ['document.id']);
+  assert.deepEqual(absent.results[0], { text: 't' });
+});
+
+test('inherited properties such as constructor are reported missing', () => {
+  const out = selectFields(GET_DOCUMENT, 'chunks', ['text', 'constructor', 'toString'], ['chunk_id']);
+  assert.deepEqual(out.fields_applied.missing, ['constructor', 'toString']);
 });
 
 test('no notice when nothing was removed or missing', () => {
@@ -526,7 +542,8 @@ test('the four tools accept fields, refuse an empty list, and describe it withou
 test('search_v3 projects results and does not send fields to the API', async (t) => {
   const seen = mockFetch(t, QUERY_V3);
   const out = parse(await call(handlers(), 'captain_search_v3', { collection: 'c', query: 'q', fields: ['text'] }));
-  assert.deepEqual(Object.keys(out.results[0]).sort(), ['chunk_id', 'text']);
+  assert.deepEqual(Object.keys(out.results[0]).sort(), ['chunk_id', 'document', 'text']);
+  assert.deepEqual(out.results[0].document, { id: QUERY_V3.results[0].document.id }, 'the document id survives');
   assert.deepEqual(out.timing, QUERY_V3.timing);
   assert.equal('fields' in JSON.parse(seen[0].body), false);
 });
